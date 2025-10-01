@@ -1,0 +1,82 @@
+# EditorConfig is awesome: https://EditorConfig.org
+# This file configures code style rules for the Unity RPG project
+
+# top-most EditorConfig file
+root = true
+
+# All files
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# C# files
+[*.cs]
+indent_style = space
+indent_size = 4
+
+# C# Code Style Rules
+# Disable "Namespace does not match folder structure" for Unity projects
+dotnet_diagnostic.IDE0130.severity = none
+
+# Other useful Unity-specific suppressions
+# IDE0044: Make field readonly - sometimes Unity SerializeField prevents this
+dotnet_diagnostic.IDE0044.severity = suggestion
+
+# IDE0051: Private member is unused - Unity uses reflection for some private methods
+dotnet_diagnostic.IDE0051.severity = suggestion
+
+# CS0649: Field is never assigned - Unity assigns SerializeField via Inspector
+dotnet_diagnostic.CS0649.severity = none
+
+# UNT0001: Empty Unity message
+dotnet_diagnostic.UNT0001.severity = warning
+
+# UNT0002: Inefficient tag comparison
+dotnet_diagnostic.UNT0002.severity = warning
+
+# Naming conventions
+dotnet_naming_rule.private_fields_should_be_camel_case.severity = suggestion
+dotnet_naming_rule.private_fields_should_be_camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_should_be_camel_case.style = camel_case_style
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+dotnet_naming_style.camel_case_style.capitalization = camel_case
+
+# Code style preferences
+csharp_prefer_braces = true:suggestion
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = false:suggestion
+
+# New line preferences
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+
+# Indentation preferences
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+
+# Shader files
+[*.shader]
+indent_style = space
+indent_size = 4
+
+# JSON files
+[*.json]
+indent_style = space
+indent_size = 2
+
+# XML project files
+[*.{csproj,vbproj,vcxproj,vcxproj.filters,proj,projitems,shproj}]
+indent_size = 2
+
+# YAML files
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
