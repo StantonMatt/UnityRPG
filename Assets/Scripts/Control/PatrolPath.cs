@@ -2,17 +2,22 @@ using UnityEngine;
 
 namespace RPG.Control
 {
+    public enum PatrolType
+    {
+        Circular, // Loop back to start (0→1→2→0...)
+        Linear    // Reverse at ends (0→1→2→1→0...)
+    }
+
     /// <summary>
     /// Defines a patrol path with multiple waypoints.
     /// Place this component on an empty GameObject with child transforms as waypoints.
     /// </summary>
     public class PatrolPath : MonoBehaviour
     {
-        [Tooltip("Radius around waypoint to consider 'reached'")]
-        [SerializeField] private float waypointTolerance = 1f;
+        [Tooltip("Circular: loops back to start. Linear: reverses at ends")]
+        [SerializeField] private PatrolType patrolType = PatrolType.Circular;
 
-        [Tooltip("How long to wait at each waypoint before moving to next")]
-        [SerializeField] private float waypointDwellTime = 2f;
+        public PatrolType Type => patrolType;
 
         /// <summary>
         /// Get the position of a waypoint by index.
@@ -43,21 +48,6 @@ namespace RPG.Control
             return transform.childCount;
         }
 
-        /// <summary>
-        /// How close the AI needs to be to consider waypoint reached.
-        /// </summary>
-        public float GetWaypointTolerance()
-        {
-            return waypointTolerance;
-        }
-
-        /// <summary>
-        /// How long to wait at each waypoint.
-        /// </summary>
-        public float GetWaypointDwellTime()
-        {
-            return waypointDwellTime;
-        }
 
         #if UNITY_EDITOR
         /// <summary>
@@ -65,6 +55,8 @@ namespace RPG.Control
         /// </summary>
         private void OnDrawGizmos()
         {
+            if (transform.childCount == 0) return;
+
             Gizmos.color = Color.cyan;
 
             // Draw spheres at each waypoint
@@ -73,10 +65,23 @@ namespace RPG.Control
                 Vector3 waypointPos = GetWaypoint(i);
                 Gizmos.DrawSphere(waypointPos, 0.3f);
 
-                // Draw line to next waypoint
-                int nextIndex = GetNextIndex(i);
-                Vector3 nextWaypointPos = GetWaypoint(nextIndex);
-                Gizmos.DrawLine(waypointPos, nextWaypointPos);
+                // Draw lines based on patrol type
+                if (patrolType == PatrolType.Circular)
+                {
+                    // Draw line to next waypoint (loops back to start)
+                    int nextIndex = GetNextIndex(i);
+                    Vector3 nextWaypointPos = GetWaypoint(nextIndex);
+                    Gizmos.DrawLine(waypointPos, nextWaypointPos);
+                }
+                else // Linear
+                {
+                    // Draw line to next waypoint (no line from last back to first)
+                    if (i < transform.childCount - 1)
+                    {
+                        Vector3 nextWaypointPos = GetWaypoint(i + 1);
+                        Gizmos.DrawLine(waypointPos, nextWaypointPos);
+                    }
+                }
             }
         }
         #endif

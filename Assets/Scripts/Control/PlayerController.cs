@@ -3,6 +3,8 @@ using UnityEngine.InputSystem;
 using UnityEngine.AI;
 using RPG.Movement; // For Mover component
 using RPG.Combat;   // For Fighter component
+using RPG.Core;
+using RPG.Stats;
 
 namespace RPG.Control
 {
@@ -40,6 +42,7 @@ namespace RPG.Control
     private Mover mover;
     private Fighter fighter;
     private Camera mainCamera;
+    private RPG.Stats.Health health;
 
     // Input tracking for LastPressed mode
     private float lastHorizontalInput = 0f;
@@ -71,16 +74,23 @@ namespace RPG.Control
     {
         mover = GetComponent<Mover>();
         fighter = GetComponent<Fighter>();
+        health = GetComponent<RPG.Stats.Health>();
         mainCamera = Camera.main;
 
         if (mainCamera == null)
         {
-            Debug.LogError("Main Camera not found! Ensure a camera is tagged 'MainCamera'.", this);
+            GameDebug.LogError("Main Camera not found! Ensure a camera is tagged 'MainCamera'.", this);
         }
     }
 
     private void Update()
     {
+        // Don't process input if dead
+        if (health != null && health.IsDead())
+        {
+            return;
+        }
+
         // Update cursor affordance (what the cursor is hovering over)
         UpdateCursorAffordance();
 

@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b810680f021c07d49a4368ecc3cf1eb2, type: 3}
+  m_Name: BasicSword
+  m_EditorClassIdentifier: Assembly-CSharp::RPG.Combat.WeaponConfig
+  damage: 50
+  range: 1
+  attackCooldown: 1
+  animationDuration: 0.8
+  hitVFXPrefab: {fileID: 0}
+  hitFlashColor: {r: 1, g: 0, b: 0, a: 1}
+  hitFlashDuration: 0.5
+  enableWeaponTrail: 1
+  trailColor: {r: 0, g: 0.8685653, b: 1, a: 1}
+  swingSounds:
+  - {fileID: 8300000, guid: a9cd087ce09310b4aac1d450a8093bd5, type: 3}
+  - {fileID: 8300000, guid: 01d90435e3d442a419f46037584f8e55, type: 3}
+  hitSounds:
+  - {fileID: 8300000, guid: 228471da9e11a0048826e020e7f5368a, type: 3}
+  - {fileID: 8300000, guid: 037867533911e5a479f35e3052844608, type: 3}
+  swingVolume: 0.7
+  hitVolume: 0.8
+  enableHitStop: 1
+  hitStopDuration: 0.05
+  enableCameraShake: 0
+  cameraShakeIntensity: 0.2
+  enableKnockback: 0
+  knockbackForce: 5
+  enableHitReact: 1
+  hitReactTrigger: hitReact

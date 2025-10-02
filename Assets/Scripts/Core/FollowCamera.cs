@@ -77,7 +77,8 @@ namespace RPG.Core
             }
             else
             {
-                Debug.LogWarning("FollowCamera: No target assigned and no GameObject with 'Player' tag found!", this);
+                GameDebug.LogWarning("FollowCamera: No target assigned and no GameObject with 'Player' tag found!",
+                    config => config.enableDebugLogs, this);
             }
         }
         

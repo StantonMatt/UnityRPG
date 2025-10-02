@@ -9,11 +9,14 @@ namespace RPG.Control
     /// <summary>
     /// Controls AI behavior for enemies.
     /// Configurable per-enemy through Inspector.
+    /// Delegates patrol and post-combat to specialized components.
     /// </summary>
     [RequireComponent(typeof(Fighter))]
     [RequireComponent(typeof(Health))]
     [RequireComponent(typeof(Mover))]
     [RequireComponent(typeof(ActionScheduler))]
+    [RequireComponent(typeof(PatrolController))]
+    [RequireComponent(typeof(PostCombatHandler))]
     public class AIController : MonoBehaviour
     {
         [Header("Behavior Configuration")]
@@ -30,6 +33,12 @@ namespace RPG.Control
         [Header("Patrol Settings")]
         [Tooltip("Patrol path this enemy follows when not in combat (optional)")]
         [SerializeField] private PatrolPath patrolPath = null;
+
+        [Tooltip("How close to waypoint before considering it 'reached'")]
+        [SerializeField] private float waypointTolerance = 1f;
+
+        [Tooltip("How long to wait at each waypoint before moving to next")]
+        [SerializeField] private float waypointDwellTime = 2f;
 
         [Tooltip("How enemy returns to patrol after combat")]
         [SerializeField] private PatrolReturnBehavior returnBehavior = PatrolReturnBehavior.ClosestPoint;
@@ -51,28 +60,28 @@ namespace RPG.Control
         [Tooltip("Movement speed when chasing or in combat")]
         [SerializeField] private float chaseSpeed = 5f;
 
+        // Components
         private Fighter fighter;
         private Health health;
         private Mover mover;
         private UnityEngine.AI.NavMeshAgent navMeshAgent;
+        private PatrolController patrolController;
+        private PostCombatHandler postCombatHandler;
+
+        // State
         private GameObject player;
         private Vector3 guardPosition;
-        private Vector3 aggroPosition;
-        private int aggroWaypointIndex;
-        private float timeSinceArrivedAtWaypoint = Mathf.Infinity;
-        private float postCombatTimer = 0f;
-        private int currentWaypointIndex = 0;
         private bool hadTargetLastFrame = false;
-        private Vector3 decelerationMoveDirection; // Direction to move during deceleration
 
-        private enum PostCombatState
-        {
-            None,           // Not in post-combat
-            Decelerating,   // Slowing down
-            Dwelling,       // Standing still
-            Returning       // Moving back to patrol
-        }
-        private PostCombatState postCombatState = PostCombatState.None;
+        // Public properties for components to access settings
+        public float WaypointTolerance => waypointTolerance;
+        public float WaypointDwellTime => waypointDwellTime;
+        public float DecelerationTime => decelerationTime;
+        public float DwellTime => dwellTime;
+        public float ChaseSpeed => chaseSpeed;
+        public float PatrolSpeed => patrolSpeed;
+        public PatrolReturnBehavior ReturnBehavior => returnBehavior;
+        public DecelerationDirection DecelDirection => decelerationDirection;
 
         private void Start()
         {
@@ -80,14 +89,32 @@ namespace RPG.Control
             health = GetComponent<Health>();
             mover = GetComponent<Mover>();
             navMeshAgent = GetComponent<UnityEngine.AI.NavMeshAgent>();
+            patrolController = GetComponent<PatrolController>();
+            postCombatHandler = GetComponent<PostCombatHandler>();
             player = GameObject.FindGameObjectWithTag("Player");
             guardPosition = transform.position;
+
+            // Safety check: make sure we didn't find ourselves as the player
+            if (player == gameObject)
+            {
+                GameDebug.LogError($"AIController on {gameObject.name} found itself as Player! Check your tags - this enemy should NOT have the 'Player' tag.", this);
+                player = null;
+            }
+
+            // Initialize patrol
+            if (patrolPath != null)
+            {
+                patrolController.Initialize(patrolPath);
+            }
         }
 
         private void Update()
         {
             // Don't do anything if dead
             if (health.IsDead()) return;
+
+            // Update post-combat handler (runs its state machine)
+            postCombatHandler.UpdatePostCombat();
 
             // Behavior based on type
             switch (behaviorType)
@@ -117,162 +144,33 @@ namespace RPG.Control
             float distanceToPlayer = Vector3.Distance(transform.position, player.transform.position);
             bool inAggroRange = distanceToPlayer <= aggroRange;
 
-            // State: In Combat
-            if (inAggroRange && postCombatState == PostCombatState.None)
+            // State: Player in aggro range - attack (even if in post-combat)
+            if (inAggroRange)
             {
+                // Cancel post-combat if we were in it
+                if (postCombatHandler.IsInPostCombat)
+                {
+                    postCombatHandler.CancelPostCombat();
+                }
+
                 SetSpeed(chaseSpeed);
+                patrolController.PausePatrol();
                 fighter.Attack(player);
             }
             // State: Just lost aggro - start post-combat sequence
-            else if (!inAggroRange && postCombatState == PostCombatState.None && fighter.HasTarget())
+            else if (!inAggroRange && !postCombatHandler.IsInPostCombat && fighter.HasTarget())
             {
-                // Save position where we lost aggro
-                aggroPosition = transform.position;
-                aggroWaypointIndex = currentWaypointIndex;
-
-                // Save the direction we should move during deceleration
-                if (decelerationDirection == DecelerationDirection.TowardPlayer && player != null)
-                {
-                    // Direction toward player at the moment aggro is lost
-                    decelerationMoveDirection = (player.transform.position - transform.position).normalized;
-                    decelerationMoveDirection.y = 0; // Keep on horizontal plane
-                }
-                else
-                {
-                    // Direction we're currently facing
-                    decelerationMoveDirection = transform.forward;
-                }
-
-                // Start deceleration
-                postCombatState = PostCombatState.Decelerating;
-                postCombatTimer = 0f;
-                fighter.Cancel(); // Stop attacking
+                postCombatHandler.StartPostCombat(
+                    transform.position,
+                    patrolController.CurrentWaypointIndex,
+                    player
+                );
             }
-            // State: Decelerating
-            else if (postCombatState == PostCombatState.Decelerating)
-            {
-                // Player came back into range - resume combat
-                if (inAggroRange)
-                {
-                    postCombatState = PostCombatState.None;
-                    SetSpeed(chaseSpeed);
-                    fighter.Attack(player);
-                    return;
-                }
-
-                postCombatTimer += Time.deltaTime;
-
-                if (postCombatTimer < decelerationTime)
-                {
-                    // Decelerate smoothly
-                    float progress = postCombatTimer / decelerationTime;
-                    float currentSpeed = Mathf.Lerp(chaseSpeed, 0f, progress);
-
-                    if (navMeshAgent != null)
-                    {
-                        Vector3 moveDirection;
-
-                        // Determine movement direction based on setting
-                        if (decelerationDirection == DecelerationDirection.TowardPlayer && player != null)
-                        {
-                            // Face the player and move toward them
-                            Vector3 lookDirection = player.transform.position - transform.position;
-                            lookDirection.y = 0; // Keep on horizontal plane
-
-                            if (lookDirection != Vector3.zero)
-                            {
-                                transform.rotation = Quaternion.LookRotation(lookDirection);
-                                moveDirection = lookDirection.normalized;
-                            }
-                            else
-                            {
-                                moveDirection = decelerationMoveDirection;
-                            }
-                        }
-                        else
-                        {
-                            // Use saved direction (momentum)
-                            moveDirection = decelerationMoveDirection;
-                        }
-
-                        // Move with decreasing speed
-                        navMeshAgent.velocity = moveDirection * currentSpeed;
-                    }
-
-                    #if UNITY_EDITOR
-                    Debug.Log($"Decelerating: {postCombatTimer:F2}s / {decelerationTime:F2}s, Speed: {currentSpeed:F2}");
-                    #endif
-                }
-                else
-                {
-                    // Deceleration complete - start dwelling
-                    // Save the CURRENT position where we stopped, not where we started decelerating
-                    aggroPosition = transform.position;
-
-                    postCombatState = PostCombatState.Dwelling;
-                    postCombatTimer = 0f;
-
-                    if (navMeshAgent != null)
-                    {
-                        navMeshAgent.isStopped = true;
-                        navMeshAgent.velocity = Vector3.zero;
-                        navMeshAgent.ResetPath();
-                    }
-
-                    #if UNITY_EDITOR
-                    Debug.Log("Deceleration complete, starting dwell");
-                    #endif
-                }
-            }
-            // State: Dwelling
-            else if (postCombatState == PostCombatState.Dwelling)
-            {
-                // Player came back into range - resume combat
-                if (inAggroRange)
-                {
-                    postCombatState = PostCombatState.None;
-                    if (navMeshAgent != null) navMeshAgent.isStopped = false;
-                    SetSpeed(chaseSpeed);
-                    fighter.Attack(player);
-                    return;
-                }
-
-                postCombatTimer += Time.deltaTime;
-
-                #if UNITY_EDITOR
-                Debug.Log($"Dwelling: {postCombatTimer:F2}s / {dwellTime:F2}s");
-                #endif
-
-                if (postCombatTimer >= dwellTime)
-                {
-                    // Dwell complete - start returning
-                    postCombatState = PostCombatState.Returning;
-                    if (navMeshAgent != null) navMeshAgent.isStopped = false;
-
-                    #if UNITY_EDITOR
-                    Debug.Log("Dwell complete, starting return to patrol");
-                    #endif
-                }
-            }
-            // State: Returning to patrol
-            else if (postCombatState == PostCombatState.Returning)
-            {
-                // Player came back into range - resume combat
-                if (inAggroRange)
-                {
-                    postCombatState = PostCombatState.None;
-                    SetSpeed(chaseSpeed);
-                    fighter.Attack(player);
-                    return;
-                }
-
-                ReturnToAggroPosition();
-            }
-            // State: Normal patrol (no combat, not returning)
-            else
+            // State: Normal patrol (no combat, not in post-combat)
+            else if (!inAggroRange && !postCombatHandler.IsInPostCombat)
             {
                 SetSpeed(patrolSpeed);
-                PatrolBehavior();
+                patrolController.UpdatePatrol();
             }
         }
 
@@ -284,136 +182,34 @@ namespace RPG.Control
         {
             bool hasTarget = fighter.HasTarget();
 
-            // State: In Combat
-            if (hasTarget && postCombatState == PostCombatState.None)
+            // State: In Combat (re-engage even if in post-combat)
+            if (hasTarget)
             {
+                // Cancel post-combat if we were in it
+                if (postCombatHandler.IsInPostCombat)
+                {
+                    postCombatHandler.CancelPostCombat();
+                }
+
                 SetSpeed(chaseSpeed);
+                patrolController.PausePatrol();
                 hadTargetLastFrame = true;
             }
             // State: Just lost target - start post-combat sequence
-            else if (!hasTarget && postCombatState == PostCombatState.None && hadTargetLastFrame)
+            else if (!hasTarget && !postCombatHandler.IsInPostCombat && hadTargetLastFrame)
             {
-                // Save position where combat ended
-                aggroPosition = transform.position;
-                aggroWaypointIndex = currentWaypointIndex;
-
-                // Start deceleration
-                postCombatState = PostCombatState.Decelerating;
-                postCombatTimer = 0f;
+                postCombatHandler.StartPostCombat(
+                    transform.position,
+                    patrolController.CurrentWaypointIndex,
+                    null // Passive enemies don't track player
+                );
                 hadTargetLastFrame = false;
             }
-            // State: Never been in combat - just patrol
-            else if (!hasTarget && postCombatState == PostCombatState.None && !hadTargetLastFrame)
+            // State: Normal patrol (no combat, not in post-combat)
+            else if (!hasTarget && !postCombatHandler.IsInPostCombat)
             {
                 SetSpeed(patrolSpeed);
-                PatrolBehavior();
-            }
-            // State: Decelerating
-            else if (postCombatState == PostCombatState.Decelerating)
-            {
-                // Got new target - resume combat
-                if (hasTarget)
-                {
-                    postCombatState = PostCombatState.None;
-                    SetSpeed(chaseSpeed);
-                    hadTargetLastFrame = true;
-                    return;
-                }
-
-                postCombatTimer += Time.deltaTime;
-
-                if (postCombatTimer < decelerationTime)
-                {
-                    // Decelerate smoothly
-                    float progress = postCombatTimer / decelerationTime;
-                    float currentSpeed = Mathf.Lerp(chaseSpeed, 0f, progress);
-
-                    if (navMeshAgent != null)
-                    {
-                        navMeshAgent.speed = currentSpeed;
-                        // Keep the agent moving by maintaining destination
-                        if (!navMeshAgent.hasPath || navMeshAgent.remainingDistance < 0.5f)
-                        {
-                            Vector3 targetDestination;
-
-                            // Choose destination based on deceleration direction setting
-                            switch (decelerationDirection)
-                            {
-                                case DecelerationDirection.CurrentDirection:
-                                    // Continue in whatever direction enemy is facing
-                                    targetDestination = transform.position + transform.forward * 10f;
-                                    break;
-                                case DecelerationDirection.TowardPlayer:
-                                    // Passive enemies don't have a player reference
-                                    // So just continue in current direction
-                                    targetDestination = transform.position + transform.forward * 10f;
-                                    break;
-                                default:
-                                    targetDestination = transform.position + transform.forward * 10f;
-                                    break;
-                            }
-
-                            navMeshAgent.SetDestination(targetDestination);
-                        }
-                    }
-                }
-                else
-                {
-                    // Deceleration complete - start dwelling
-                    // Save CURRENT position where we stopped
-                    aggroPosition = transform.position;
-
-                    postCombatState = PostCombatState.Dwelling;
-                    postCombatTimer = 0f;
-
-                    if (navMeshAgent != null)
-                    {
-                        navMeshAgent.isStopped = true;
-                        navMeshAgent.velocity = Vector3.zero;
-                        navMeshAgent.ResetPath();
-                    }
-                }
-            }
-            // State: Dwelling
-            else if (postCombatState == PostCombatState.Dwelling)
-            {
-                // Got new target - resume combat
-                if (hasTarget)
-                {
-                    postCombatState = PostCombatState.None;
-                    if (navMeshAgent != null) navMeshAgent.isStopped = false;
-                    SetSpeed(chaseSpeed);
-                    hadTargetLastFrame = true;
-                    return;
-                }
-
-                postCombatTimer += Time.deltaTime;
-
-                if (postCombatTimer >= dwellTime)
-                {
-                    // Dwell complete - start returning
-                    postCombatState = PostCombatState.Returning;
-                    if (navMeshAgent != null) navMeshAgent.isStopped = false;
-                }
-            }
-            // State: Returning to patrol
-            else if (postCombatState == PostCombatState.Returning)
-            {
-                // Got new target - resume combat
-                if (hasTarget)
-                {
-                    postCombatState = PostCombatState.None;
-                    SetSpeed(chaseSpeed);
-                    return;
-                }
-
-                ReturnToAggroPosition();
-            }
-            // State: Normal patrol
-            else
-            {
-                SetSpeed(patrolSpeed);
-                PatrolBehavior();
+                patrolController.UpdatePatrol();
             }
         }
 
@@ -434,190 +230,7 @@ namespace RPG.Control
         private void NeutralBehavior()
         {
             SetSpeed(patrolSpeed);
-            PatrolBehavior();
-        }
-
-        /// <summary>
-        /// Patrol between waypoints or return to guard position.
-        /// </summary>
-        private void PatrolBehavior()
-        {
-            // No patrol path - just guard current position
-            if (patrolPath == null || patrolPath.GetWaypointCount() == 0)
-            {
-                GuardBehavior();
-                return;
-            }
-
-            // At waypoint - wait for dwell time before moving to next
-            if (AtWaypoint())
-            {
-                timeSinceArrivedAtWaypoint += Time.deltaTime;
-
-                if (timeSinceArrivedAtWaypoint >= patrolPath.GetWaypointDwellTime())
-                {
-                    timeSinceArrivedAtWaypoint = 0f;
-                    currentWaypointIndex = patrolPath.GetNextIndex(currentWaypointIndex);
-                }
-            }
-            // Not at waypoint - move to it
-            else
-            {
-                timeSinceArrivedAtWaypoint = 0f;
-                mover.MoveTo(GetCurrentWaypoint());
-            }
-        }
-
-        /// <summary>
-        /// Stay at guard position (no patrol).
-        /// </summary>
-        private void GuardBehavior()
-        {
-            if (Vector3.Distance(transform.position, guardPosition) > 1f)
-            {
-                mover.MoveTo(guardPosition);
-            }
-        }
-
-        /// <summary>
-        /// Return to guard position and reset patrol.
-        /// </summary>
-        private void ReturnToGuardPosition()
-        {
-            timeSinceArrivedAtWaypoint = Mathf.Infinity;
-            postCombatState = PostCombatState.None;
-            mover.MoveTo(guardPosition);
-        }
-
-        /// <summary>
-        /// Return to the position where aggro started, then resume patrol.
-        /// </summary>
-        private void ReturnToAggroPosition()
-        {
-            SetSpeed(patrolSpeed);
-
-            // No patrol path - just return to aggro position
-            if (patrolPath == null || patrolPath.GetWaypointCount() == 0)
-            {
-                if (Vector3.Distance(transform.position, aggroPosition) <= 1f)
-                {
-                    postCombatState = PostCombatState.None;
-                }
-                else
-                {
-                    mover.MoveTo(aggroPosition);
-                }
-                return;
-            }
-
-            // Handle return behavior based on configuration
-            switch (returnBehavior)
-            {
-                case PatrolReturnBehavior.AggroPosition:
-                    ReturnToAggroPositionBehavior();
-                    break;
-                case PatrolReturnBehavior.ClosestPoint:
-                    ReturnToClosestPointOnPath();
-                    break;
-            }
-        }
-
-        /// <summary>
-        /// Return to exact position where aggro started (original behavior).
-        /// </summary>
-        private void ReturnToAggroPositionBehavior()
-        {
-            // Arrived at aggro position - resume patrol from saved waypoint
-            if (Vector3.Distance(transform.position, aggroPosition) <= 1f)
-            {
-                postCombatState = PostCombatState.None;
-                currentWaypointIndex = aggroWaypointIndex;
-                timeSinceArrivedAtWaypoint = 0f;
-                PatrolBehavior();
-            }
-            // Still moving back to aggro position
-            else
-            {
-                mover.MoveTo(aggroPosition);
-            }
-        }
-
-        /// <summary>
-        /// Return to closest point on patrol path (smoother behavior).
-        /// </summary>
-        private void ReturnToClosestPointOnPath()
-        {
-            // Find closest point on entire patrol path
-            Vector3 closestPoint = Vector3.zero;
-            int closestSegmentWaypoint = 0;
-            float closestDistance = Mathf.Infinity;
-
-            // Check each segment of the patrol path
-            for (int i = 0; i < patrolPath.GetWaypointCount(); i++)
-            {
-                Vector3 waypointA = patrolPath.GetWaypoint(i);
-                Vector3 waypointB = patrolPath.GetWaypoint(patrolPath.GetNextIndex(i));
-
-                // Find closest point on this line segment
-                Vector3 pointOnSegment = GetClosestPointOnLineSegment(waypointA, waypointB, transform.position);
-                float distance = Vector3.Distance(transform.position, pointOnSegment);
-
-                if (distance < closestDistance)
-                {
-                    closestDistance = distance;
-                    closestPoint = pointOnSegment;
-                    closestSegmentWaypoint = patrolPath.GetNextIndex(i); // Target the next waypoint
-                }
-            }
-
-            // Arrived at closest point on path - resume patrol
-            if (closestDistance <= 1f)
-            {
-                postCombatState = PostCombatState.None;
-                currentWaypointIndex = closestSegmentWaypoint;
-                timeSinceArrivedAtWaypoint = 0f;
-                PatrolBehavior();
-            }
-            // Still moving to closest point
-            else
-            {
-                mover.MoveTo(closestPoint);
-            }
-        }
-
-        /// <summary>
-        /// Get the closest point on a line segment to a given position.
-        /// </summary>
-        private Vector3 GetClosestPointOnLineSegment(Vector3 lineStart, Vector3 lineEnd, Vector3 position)
-        {
-            Vector3 lineDirection = lineEnd - lineStart;
-            float lineLength = lineDirection.magnitude;
-            lineDirection.Normalize();
-
-            Vector3 lineToPosition = position - lineStart;
-            float dotProduct = Vector3.Dot(lineToPosition, lineDirection);
-
-            // Clamp to line segment (not infinite line)
-            dotProduct = Mathf.Clamp(dotProduct, 0f, lineLength);
-
-            return lineStart + lineDirection * dotProduct;
-        }
-
-        /// <summary>
-        /// Check if we're at the current waypoint.
-        /// </summary>
-        private bool AtWaypoint()
-        {
-            float distanceToWaypoint = Vector3.Distance(transform.position, GetCurrentWaypoint());
-            return distanceToWaypoint < patrolPath.GetWaypointTolerance();
-        }
-
-        /// <summary>
-        /// Get the current waypoint position.
-        /// </summary>
-        private Vector3 GetCurrentWaypoint()
-        {
-            return patrolPath.GetWaypoint(currentWaypointIndex);
+            patrolController.UpdatePatrol();
         }
 
         /// <summary>
@@ -677,23 +290,5 @@ namespace RPG.Control
         Passive,     // Only attacks when attacked
         Coward,      // Flees when attacked (future)
         Neutral      // Never attacks
-    }
-
-    /// <summary>
-    /// How the AI returns to patrol after combat.
-    /// </summary>
-    public enum PatrolReturnBehavior
-    {
-        AggroPosition,  // Return to exact position where combat started
-        ClosestPoint    // Return to closest point on patrol path (smoother)
-    }
-
-    /// <summary>
-    /// Direction enemy moves while decelerating after losing aggro.
-    /// </summary>
-    public enum DecelerationDirection
-    {
-        CurrentDirection,  // Continue in the direction enemy is facing
-        TowardPlayer       // Continue moving toward player (chase momentum)
     }
 }

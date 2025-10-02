@@ -59,7 +59,7 @@ namespace RPG.Movement
 
         if (agent == null)
         {
-            Debug.LogError("NavMeshAgent component is missing!", this);
+            GameDebug.LogError("NavMeshAgent component is missing!", this);
         }
 
         ApplyMovementStyle();

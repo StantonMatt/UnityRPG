@@ -9,14 +9,9 @@ namespace RPG.Combat
     [RequireComponent(typeof(ActionScheduler))]
     public class Fighter : MonoBehaviour, IAction
     {
-        [Header("Combat Settings")]
-        [SerializeField] private float weaponRange = 2f;
-        [SerializeField] private float timeBetweenAttacks = 1f;
-        [SerializeField] private float weaponDamage = 10f;
-
-        [Header("Animation")]
-        [Tooltip("Duration of attack animation (how long to stay rooted). Should match your attack animation length.")]
-        [SerializeField] private float attackAnimationDuration = 0.8f;
+        [Header("Weapon Configuration")]
+        [Tooltip("Weapon data (damage, range, sounds, VFX, etc.)")]
+        [SerializeField] private WeaponConfig weaponConfig;
 
         private CombatTarget target;
         private Health targetHealth; // Cache for damage dealing
@@ -84,7 +79,7 @@ namespace RPG.Combat
                 transform.rotation = Quaternion.LookRotation(lookDirection);
             }
 
-            if (timeSinceLastAttack >= timeBetweenAttacks)
+            if (timeSinceLastAttack >= (weaponConfig?.attackCooldown ?? 1f))
             {
                 // Trigger attack animation - this will call Hit() via Animation Event
                 TriggerAttack();
@@ -94,6 +89,18 @@ namespace RPG.Combat
 
         private void TriggerAttack()
         {
+            if (weaponConfig == null)
+            {
+                GameDebug.LogError($"{gameObject.name} has no WeaponConfig assigned!", this);
+                return;
+            }
+
+            // Fire attack started event (for swing sounds, weapon trails)
+            CombatEvents.RaiseAttackStarted(new CombatEvents.AttackStartedEvent(
+                gameObject,
+                weaponConfig
+            ));
+
             if (animator != null)
             {
                 animator.ResetTrigger("stopAttack"); // Clear any stop triggers first
@@ -104,7 +111,7 @@ namespace RPG.Combat
             isAttacking = true; // Lock in place during attack animation
 
             // Unlock after attack ANIMATION completes (not cooldown)
-            Invoke(nameof(StopAttacking), attackAnimationDuration);
+            Invoke(nameof(StopAttacking), weaponConfig.animationDuration);
         }
 
         /// <summary>
@@ -124,23 +131,43 @@ namespace RPG.Combat
             // If target was cleared (action cancelled), don't deal damage
             if (target == null) return;
             if (targetHealth == null) return;
+            if (weaponConfig == null) return;
 
-            // Deal damage to the target, passing this GameObject as the instigator
-            targetHealth.TakeDamage(weaponDamage, gameObject);
+            // Calculate hit point (where VFX should spawn)
+            Vector3 hitPoint = targetCollider != null
+                ? targetCollider.ClosestPoint(transform.position)
+                : targetTransform.position;
+
+            // Calculate hit normal (direction for VFX orientation)
+            Vector3 hitNormal = (transform.position - hitPoint).normalized;
+
+            // Deal damage to the target with hit data
+            targetHealth.TakeDamage(weaponConfig.damage, gameObject, hitPoint, hitNormal);
+
+            // Fire attack hit event (for impact sounds, VFX, hitstop, camera shake)
+            CombatEvents.RaiseAttackHit(new CombatEvents.AttackHitEvent(
+                gameObject,
+                target.gameObject,
+                weaponConfig,
+                hitPoint,
+                hitNormal
+            ));
         }
 
         private bool GetIsInRange()
         {
+            if (weaponConfig == null) return false;
+
             if (targetCollider != null)
             {
                 // Calculate distance from player position to closest point on target's collider
                 Vector3 closestPoint = targetCollider.ClosestPoint(transform.position);
                 float distanceToSurface = Vector3.Distance(transform.position, closestPoint);
-                return distanceToSurface < weaponRange;
+                return distanceToSurface < weaponConfig.range;
             }
 
             // Fallback to center-to-center if no collider
-            return Vector3.Distance(transform.position, targetTransform.position) < weaponRange;
+            return Vector3.Distance(transform.position, targetTransform.position) < weaponConfig.range;
         }
 
         public bool CanAttack(GameObject combatTarget)
@@ -154,6 +181,14 @@ namespace RPG.Combat
 
         public void Attack(GameObject combatTarget)
         {
+            // Validate target before attacking
+            if (!CanAttack(combatTarget))
+            {
+                GameDebug.LogWarning($"{gameObject.name} tried to attack invalid target {(combatTarget != null ? combatTarget.name : "NULL")}",
+                    config => config.logFighterState, this);
+                return;
+            }
+
             actionScheduler.StartAction(this); // Register Fighter as the active action
             target = combatTarget.GetComponent<CombatTarget>();
             targetHealth = combatTarget.GetComponent<Health>(); // Cache health for damage dealing

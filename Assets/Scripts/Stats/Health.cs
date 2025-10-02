@@ -34,26 +34,44 @@ namespace RPG.Stats
         /// </summary>
         /// <param name="damage">Amount of damage to deal</param>
         /// <param name="instigator">The GameObject that dealt the damage (optional)</param>
-        public void TakeDamage(float damage, GameObject instigator = null)
+        /// <param name="hitPoint">World position where hit occurred (for VFX)</param>
+        /// <param name="hitNormal">Normal direction of hit (for VFX orientation)</param>
+        public void TakeDamage(float damage, GameObject instigator = null, Vector3 hitPoint = default, Vector3 hitNormal = default)
         {
             if (isDead) return; // Already dead, can't take more damage
 
             currentHealth = Mathf.Max(currentHealth - damage, 0f);
 
-            #if UNITY_EDITOR
-            Debug.Log($"{gameObject.name} took {damage} damage. Health: {currentHealth}/{maxHealth}", this);
-            Debug.Log($"{gameObject.name} was attacked by {(instigator != null ? instigator.name : "UNKNOWN - NO INSTIGATOR!")}", this);
-            #endif
+            GameDebug.Log($"{gameObject.name} took {damage} damage. Health: {currentHealth}/{maxHealth}",
+                config => config.logHealthSystem, this);
+            GameDebug.Log($"{gameObject.name} was attacked by {(instigator != null ? instigator.name : "UNKNOWN - NO INSTIGATOR!")}",
+                config => config.logHealthSystem, this);
 
-            // Respond to being attacked (fight back, flee, etc.)
+            // Fire event for feedback systems (flash, sound, VFX, etc.)
+            CombatEvents.RaiseDamageTaken(new CombatEvents.DamageTakenEvent(
+                gameObject,
+                damage,
+                currentHealth,
+                maxHealth
+            ));
+
+            // Fire event from attacker's perspective
             if (instigator != null)
             {
+                CombatEvents.RaiseDamageDealt(new CombatEvents.DamageDealtEvent(
+                    instigator,
+                    gameObject,
+                    damage,
+                    hitPoint,
+                    hitNormal
+                ));
+
                 AggravateNearbyEnemies(instigator);
             }
 
             if (currentHealth <= 0)
             {
-                Die();
+                Die(instigator);
             }
         }
 
@@ -72,29 +90,27 @@ namespace RPG.Stats
             AIController aiController = GetComponent<AIController>();
             if (aiController != null && !aiController.ShouldRetaliateWhenAttacked())
             {
-                #if UNITY_EDITOR
-                Debug.Log($"{gameObject.name} was attacked but AI behavior prevents retaliation.", this);
-                #endif
+                GameDebug.Log($"{gameObject.name} was attacked but AI behavior prevents retaliation.",
+                    config => config.logHealthSystem, this);
                 return; // Neutral or Coward AI - don't fight back
             }
 
-            #if UNITY_EDITOR
-            Debug.Log($"{gameObject.name} is aggroing! Looking for Fighter component...", this);
-            #endif
+            GameDebug.Log($"{gameObject.name} is aggroing! Looking for Fighter component...",
+                config => config.logHealthSystem, this);
 
             // Make this character attack back (AI only)
             Fighter fighter = GetComponent<Fighter>();
 
-            #if UNITY_EDITOR
             if (fighter != null)
             {
-                Debug.Log($"{gameObject.name} has Fighter! Attacking {instigator.name}!", this);
+                GameDebug.Log($"{gameObject.name} has Fighter! Attacking {instigator.name}!",
+                    config => config.logHealthSystem, this);
             }
             else
             {
-                Debug.LogWarning($"{gameObject.name} does NOT have Fighter component - cannot fight back!", this);
+                GameDebug.LogWarning($"{gameObject.name} does NOT have Fighter component - cannot fight back!",
+                    config => config.logHealthSystem, this);
             }
-            #endif
 
             if (fighter != null)
             {
@@ -115,23 +131,23 @@ namespace RPG.Stats
 
             currentHealth = Mathf.Min(currentHealth + amount, maxHealth);
 
-            #if UNITY_EDITOR
-            Debug.Log($"{gameObject.name} healed {amount}. Health: {currentHealth}/{maxHealth}", this);
-            #endif
+            GameDebug.Log($"{gameObject.name} healed {amount}. Health: {currentHealth}/{maxHealth}",
+                config => config.logHealthSystem, this);
         }
 
         /// <summary>
         /// Handle death.
         /// </summary>
-        private void Die()
+        private void Die(GameObject killer)
         {
             if (isDead) return; // Already dead
 
             isDead = true;
 
-            #if UNITY_EDITOR
-            Debug.Log($"{gameObject.name} has died!", this);
-            #endif
+            GameDebug.Log($"{gameObject.name} has died!", config => config.logHealthSystem, this);
+
+            // Fire death event
+            CombatEvents.RaiseDeath(new CombatEvents.DeathEvent(gameObject, killer));
 
             // Play death animation
             if (animator != null)

@@ -14,9 +14,13 @@ GameObject:
   - component: {fileID: 4357491303865560729}
   - component: {fileID: 3723742452025856192}
   - component: {fileID: 6077126749192621828}
-  - component: {fileID: 3043248529554190564}
-  - component: {fileID: 6067341920118261195}
   - component: {fileID: 7724031545194410139}
+  - component: {fileID: 6067341920118261195}
+  - component: {fileID: 3043248529554190564}
+  - component: {fileID: 3138428064019237101}
+  - component: {fileID: 1302397545009622373}
+  - component: {fileID: -2993753275366778343}
+  - component: {fileID: -6198733935831415044}
   m_Layer: 0
   m_Name: Character
   m_TagString: Player
@@ -100,10 +104,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 75451c9e4444c43438367a51b351c802, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RPG.Combat.Fighter
-  weaponRange: 1
-  timeBetweenAttacks: 1.2
-  weaponDamage: 10
-  attackAnimationDuration: 0.7
+  weaponConfig: {fileID: 0}
 --- !u!114 &4357491303865560729
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -145,40 +146,6 @@ MonoBehaviour:
   maxPathDistance: 35
   maxSearchRadius: 10
   instantReversalsForPathfinding: 1
---- !u!114 &3043248529554190564
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6952757889219253764}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d29faa57b94d3424a93d3a42280e69ce, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::RPG.Core.ActionScheduler
---- !u!95 &6067341920118261195
-Animator:
-  serializedVersion: 7
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6952757889219253764}
-  m_Enabled: 1
-  m_Avatar: {fileID: 9000000, guid: d288a0e4a2d923b46898986e979da643, type: 3}
-  m_Controller: {fileID: 9100000, guid: fc58da986d2f05b49ad21d40aed1a735, type: 2}
-  m_CullingMode: 0
-  m_UpdateMode: 0
-  m_ApplyRootMotion: 0
-  m_LinearVelocityBlending: 0
-  m_StabilizeFeet: 0
-  m_AnimatePhysics: 0
-  m_WarningMessage: 
-  m_HasTransformHierarchy: 1
-  m_AllowConstantClipSamplingOptimization: 1
-  m_KeepAnimatorStateOnDisable: 0
-  m_WriteDefaultValuesOnDisable: 0
 --- !u!195 &7724031545194410139
 NavMeshAgent:
   m_ObjectHideFlags: 0
@@ -201,6 +168,100 @@ NavMeshAgent:
   m_BaseOffset: 0
   m_WalkableMask: 4294967295
   m_ObstacleAvoidanceType: 4
+--- !u!95 &6067341920118261195
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6952757889219253764}
+  m_Enabled: 1
+  m_Avatar: {fileID: 9000000, guid: d288a0e4a2d923b46898986e979da643, type: 3}
+  m_Controller: {fileID: 9100000, guid: fc58da986d2f05b49ad21d40aed1a735, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &3043248529554190564
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6952757889219253764}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d29faa57b94d3424a93d3a42280e69ce, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RPG.Core.ActionScheduler
+--- !u!114 &3138428064019237101
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6952757889219253764}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 06053fc445a4d6f48a25b753f20ef8fe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RPG.Combat.Feedback.WeaponFeedback
+  audioSource: {fileID: 0}
+  weaponTrail: {fileID: 0}
+  enableDebugLogs: 0
+--- !u!114 &1302397545009622373
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6952757889219253764}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 20b606f06fd0afd42a688c42e7a3c92f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RPG.Combat.Feedback.HitSoundPlayer
+  audioSource: {fileID: 0}
+  enableDebugLogs: 0
+--- !u!114 &-2993753275366778343
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6952757889219253764}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d7a2dafc58c8694d98c6bf4b807bc88, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RPG.Combat.Feedback.HitFlash
+  targetRenderer: {fileID: 0}
+  overrideFlashDuration: 0
+  enableDebugLogs: 0
+--- !u!114 &-6198733935831415044
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6952757889219253764}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f04157994a0b5a34f8084611f4a8fdca, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RPG.Combat.Feedback.HitReact
+  animator: {fileID: 0}
+  hitReactTrigger: hitReact
+  minTimeBetweenReactions: 0.3
+  enableDebugLogs: 0
 --- !u!1 &9120522749557609859
 GameObject:
   m_ObjectHideFlags: 0

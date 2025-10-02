@@ -60,6 +60,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Enemy
       objectReference: {fileID: 0}
+    - target: {fileID: 6952757889219253764, guid: 40b90f8fabde481468a02acd7faddddb, type: 3}
+      propertyPath: m_TagString
+      value: Untagged
+      objectReference: {fileID: 0}
     - target: {fileID: 7724031545194410139, guid: 40b90f8fabde481468a02acd7faddddb, type: 3}
       propertyPath: m_Speed
       value: 4
@@ -71,6 +75,12 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 6952757889219253764, guid: 40b90f8fabde481468a02acd7faddddb, type: 3}
       insertIndex: 2
       addedObject: {fileID: 61682117887005691}
+    - targetCorrespondingSourceObject: {fileID: 6952757889219253764, guid: 40b90f8fabde481468a02acd7faddddb, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3515266422625917478}
+    - targetCorrespondingSourceObject: {fileID: 6952757889219253764, guid: 40b90f8fabde481468a02acd7faddddb, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6626151965501936946}
   m_SourcePrefab: {fileID: 100100000, guid: 40b90f8fabde481468a02acd7faddddb, type: 3}
 --- !u!1 &4657464102469855763 stripped
 GameObject:
@@ -93,9 +103,35 @@ MonoBehaviour:
   aggroRange: 5
   maxChaseDistance: 10
   patrolPath: {fileID: 0}
+  waypointTolerance: 1
+  waypointDwellTime: 2
   returnBehavior: 1
   decelerationTime: 2
   dwellTime: 2
   decelerationDirection: 1
   patrolSpeed: 2
   chaseSpeed: 4
+--- !u!114 &3515266422625917478
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4657464102469855763}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a718fa51de0de44fb561cca59d328f3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RPG.Control.PatrolController
+--- !u!114 &6626151965501936946
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4657464102469855763}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2d821ac653b8f94c8e63b97d979cadd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RPG.Control.PostCombatHandler
