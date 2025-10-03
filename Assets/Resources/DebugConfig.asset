@@ -19,6 +19,7 @@ MonoBehaviour:
   logWeaponSounds: 0
   logHitFlash: 0
   logHitReact: 0
+  logKnockback: 0
   logMoverActions: 0
   logPathfinding: 0
   logAIController: 0
@@ -26,4 +27,8 @@ MonoBehaviour:
   logPlayerController: 0
   logHealthSystem: 0
   logStatsSystem: 0
+  logVFXSpawner: 0
+  logObjectPool: 0
+  logCameraShake: 0
+  logTimeController: 0
   enableDebugLogs: 1

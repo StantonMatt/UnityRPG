@@ -107,6 +107,9 @@ namespace RPG.Combat
                     else
                         originalColors[i][j] = Color.white;
                 }
+
+                // Apply flash materials immediately (no swapping during flash - reduces stutter)
+                renderers[i].materials = flashMaterials[i];
             }
 
             GameDebug.Log($"HitFlash initialized on {gameObject.name} with {renderers.Length} renderer(s)",
@@ -126,13 +129,14 @@ namespace RPG.Combat
                 return;
             }
 
-            // Create outline shader material
+            // Create outline shader material (transparent by default)
             outlineShaderMaterial = new Material(outlineShader);
-            outlineShaderMaterial.SetColor("_OutlineColor", outlineColor);
-            outlineShaderMaterial.SetFloat("_OutlineWidth", outlineWidth);
+            Color transparentOutline = outlineColor;
+            transparentOutline.a = 0f; // Start transparent
+            outlineShaderMaterial.SetColor("_OutlineColor", transparentOutline);
+            outlineShaderMaterial.SetFloat("_OutlineWidth", 0f); // Start with no width
 
-            // Create material arrays with outline shader
-            // Use FLASH materials (which support emission/tint) + outline shader
+            // Create material arrays with outline shader ALREADY ATTACHED
             outlineMaterials = new Material[renderers.Length][];
             for (int i = 0; i < renderers.Length; i++)
             {
@@ -145,8 +149,11 @@ namespace RPG.Combat
                     outlineMaterials[i][j] = flashMats[j];
                 }
 
-                // Add outline material last
+                // Add outline material last (transparent by default)
                 outlineMaterials[i][flashMats.Length] = outlineShaderMaterial;
+
+                // Apply outline materials immediately (no swapping later)
+                renderers[i].materials = outlineMaterials[i];
             }
 
             outlineInitialized = true;
@@ -213,32 +220,12 @@ namespace RPG.Combat
 
         private IEnumerator FlashCoroutine()
         {
-            // Initialize outline if needed
+            // Initialize outline if needed (this applies the materials with transparent outline)
             if (useOutline && !outlineInitialized)
             {
                 GameDebug.Log($"Outline not initialized, creating now...",
                     config => config.logHitFlash, this);
                 InitializeOutline();
-            }
-
-            // Apply appropriate materials
-            if (useOutline && outlineInitialized)
-            {
-                // Apply outline materials (original + outline shader)
-                for (int i = 0; i < renderers.Length; i++)
-                {
-                    renderers[i].materials = outlineMaterials[i];
-                }
-                GameDebug.Log($"Outline materials applied!",
-                    config => config.logHitFlash, this);
-            }
-            else
-            {
-                // Apply flash materials (for emission/tint effects)
-                for (int i = 0; i < renderers.Length; i++)
-                {
-                    renderers[i].materials = flashMaterials[i];
-                }
             }
 
             if (useFadeCurve && flashCurve != null && flashCurve.length > 0)
@@ -263,10 +250,35 @@ namespace RPG.Combat
                 yield return new WaitForSeconds(flashDuration);
             }
 
-            // Restore original materials (this also removes outline)
+            // Reset flash effects (keep materials, just reset properties)
+            Material[][] targetMaterials = (useOutline && outlineInitialized) ? outlineMaterials : flashMaterials;
+
             for (int i = 0; i < renderers.Length; i++)
             {
-                renderers[i].materials = originalMaterials[i];
+                int matCount = flashMaterials[i].Length;
+                for (int j = 0; j < matCount; j++)
+                {
+                    Material mat = targetMaterials[i][j];
+
+                    // Reset emission
+                    if (mat.HasProperty("_EmissionColor"))
+                        mat.SetColor("_EmissionColor", Color.black);
+
+                    // Reset color
+                    if (mat.HasProperty("_Color"))
+                        mat.SetColor("_Color", originalColors[i][j]);
+                    else if (mat.HasProperty("_BaseColor"))
+                        mat.SetColor("_BaseColor", originalColors[i][j]);
+                }
+            }
+
+            // Reset outline to transparent (if it exists)
+            if (useOutline && outlineShaderMaterial != null)
+            {
+                Color transparentOutline = outlineColor;
+                transparentOutline.a = 0f;
+                outlineShaderMaterial.SetColor("_OutlineColor", transparentOutline);
+                outlineShaderMaterial.SetFloat("_OutlineWidth", 0f);
             }
         }
 

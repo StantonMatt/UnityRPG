@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b810680f021c07d49a4368ecc3cf1eb2, type: 3}
   m_Name: BasicSword
   m_EditorClassIdentifier: Assembly-CSharp::RPG.Combat.WeaponConfig
-  damage: 50
+  damage: 1
   range: 1
   attackCooldown: 1
   animationDuration: 0.8
@@ -33,6 +33,7 @@ MonoBehaviour:
   hitStopDuration: 0.05
   enableCameraShake: 0
   cameraShakeIntensity: 0.2
+  cameraShakeDuration: 0.2
   enableKnockback: 0
   knockbackForce: 5
   enableHitReact: 1

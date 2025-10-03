@@ -74,6 +74,10 @@ namespace RPG.Combat
         [Range(0f, 1f)]
         public float cameraShakeIntensity = 0.2f;
 
+        [Tooltip("Duration of camera shake")]
+        [Range(0.05f, 0.5f)]
+        public float cameraShakeDuration = 0.2f;
+
         [Tooltip("Enable knockback on hit")]
         public bool enableKnockback = false;
 

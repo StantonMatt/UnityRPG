@@ -33,6 +33,9 @@ namespace RPG.Core
         [Tooltip("Log hit react animation triggers")]
         public bool logHitReact = false;
 
+        [Tooltip("Log knockback triggers and physics")]
+        public bool logKnockback = false;
+
         [Header("Movement System")]
         [Tooltip("Log mover actions (MoveTo, Cancel, etc.)")]
         public bool logMoverActions = false;
@@ -57,6 +60,20 @@ namespace RPG.Core
 
         [Tooltip("Log stat modifications")]
         public bool logStatsSystem = false;
+
+        [Header("VFX & Particles")]
+        [Tooltip("Log VFX spawning and pooling")]
+        public bool logVFXSpawner = false;
+
+        [Tooltip("Log object pool operations (get/return)")]
+        public bool logObjectPool = false;
+
+        [Header("Camera & Time")]
+        [Tooltip("Log camera shake triggers and intensity")]
+        public bool logCameraShake = false;
+
+        [Tooltip("Log time controller operations (hitstop, slow-mo)")]
+        public bool logTimeController = false;
 
         [Header("General")]
         [Tooltip("Master toggle - disables ALL debug logs when off")]
