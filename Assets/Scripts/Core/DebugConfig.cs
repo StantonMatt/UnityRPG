@@ -30,9 +30,6 @@ namespace RPG.Core
         [Tooltip("Log hit flash initialization and triggers")]
         public bool logHitFlash = false;
 
-        [Tooltip("Log hit react animation triggers")]
-        public bool logHitReact = false;
-
         [Tooltip("Log knockback triggers and physics")]
         public bool logKnockback = false;
 

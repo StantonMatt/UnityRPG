@@ -30,8 +30,14 @@ namespace RPG.Combat.VFX
         [Tooltip("Use global pool manager (recommended) or local pool")]
         [SerializeField] private bool useGlobalPool = true;
 
+        [Header("Performance")]
+        [Tooltip("Minimum time between VFX spawns (prevents spam and job leaks)")]
+        [Range(0f, 0.5f)]
+        [SerializeField] private float minTimeBetweenSpawns = 0.1f;
+
         // Object pool (per-prefab)
         private ObjectPool<ParticleSystem> localVFXPool;
+        private float lastSpawnTime = -999f;
 
         private void Awake()
         {
@@ -61,6 +67,15 @@ namespace RPG.Combat.VFX
         {
             // Only spawn VFX if WE are the target (not the attacker)
             if (e.Target != gameObject) return;
+
+            // Cooldown check (prevent rapid spawning that causes job leaks)
+            if (Time.time - lastSpawnTime < minTimeBetweenSpawns)
+            {
+                GameDebug.Log($"[HitVFXSpawner] Skipping VFX spawn (cooldown)",
+                    config => config.logVFXSpawner, this);
+                return;
+            }
+            lastSpawnTime = Time.time;
 
             // Determine which VFX prefab to use
             GameObject vfxPrefab = defaultHitVFXPrefab;
@@ -107,8 +122,14 @@ namespace RPG.Combat.VFX
             // Play particle system
             vfx.Play();
 
-            GameDebug.Log($"[HitVFXSpawner] Spawned {vfxPrefab.name} at {spawnPosition} for {gameObject.name}",
+            GameDebug.Log($"[HitVFXSpawner] Spawned {vfxPrefab.name} at {spawnPosition} (hitPoint: {hitPoint}, offset: {hitPointOffset}) for {gameObject.name}",
                 config => config.logVFXSpawner, this);
+
+            // Debug visualization (only in editor)
+            #if UNITY_EDITOR
+            Debug.DrawLine(hitPoint, spawnPosition, Color.green, 2f);
+            Debug.DrawRay(hitPoint, Vector3.up * 0.5f, Color.red, 2f);
+            #endif
 
             // Return to pool when done
             StartCoroutine(ReturnToPoolWhenDone(vfx, vfxPrefab));

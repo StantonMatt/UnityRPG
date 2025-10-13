@@ -13,6 +13,10 @@ namespace RPG.Combat
         [Tooltip("Weapon data (damage, range, sounds, VFX, etc.)")]
         [SerializeField] private WeaponConfig weaponConfig;
 
+        [Header("Hit Point Override")]
+        [Tooltip("Optional: Transform where hit effects spawn (e.g., fist, weapon tip). If not set, uses closest point on target.")]
+        [SerializeField] private Transform hitPointOverride;
+
         private CombatTarget target;
         private Health targetHealth; // Cache for damage dealing
         private Transform targetTransform; // Cache for performance
@@ -134,12 +138,27 @@ namespace RPG.Combat
             if (weaponConfig == null) return;
 
             // Calculate hit point (where VFX should spawn)
-            Vector3 hitPoint = targetCollider != null
-                ? targetCollider.ClosestPoint(transform.position)
-                : targetTransform.position;
+            Vector3 hitPoint;
+            Vector3 hitNormal;
 
-            // Calculate hit normal (direction for VFX orientation)
-            Vector3 hitNormal = (transform.position - hitPoint).normalized;
+            if (hitPointOverride != null)
+            {
+                // Use custom hit point (e.g., fist position)
+                hitPoint = hitPointOverride.position;
+                hitNormal = (targetTransform.position - hitPoint).normalized;
+
+                GameDebug.Log($"[Fighter] Using hit point override: {hitPoint}",
+                    config => config.logFighterState, this);
+            }
+            else
+            {
+                // Default: closest point on target collider
+                hitPoint = targetCollider != null
+                    ? targetCollider.ClosestPoint(transform.position)
+                    : targetTransform.position;
+
+                hitNormal = (transform.position - hitPoint).normalized;
+            }
 
             // Deal damage to the target with hit data
             targetHealth.TakeDamage(weaponConfig.damage, gameObject, hitPoint, hitNormal);

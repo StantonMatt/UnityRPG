@@ -54,7 +54,11 @@ namespace RPG.Core
     [SerializeField] private float collisionRadius = 0.5f; // Radius of collision sphere
     [Range(0.5f, 2f)]
     [SerializeField] private float collisionBuffer = 1f; // Extra space from collision point
-    
+
+    [Header("Time Settings")]
+    [Tooltip("Use unscaled time for camera movement (allows camera to move during hitstop/slow-motion)")]
+    [SerializeField] private bool useUnscaledTime = true;
+
     // Private variables
     private float currentHorizontalAngle = 0f;
     private float currentVerticalAngle = 45f; // Default isometric angle
@@ -106,10 +110,18 @@ namespace RPG.Core
     private void LateUpdate()
     {
         if (target == null) return;
-        
+
         HandleRotationInput();
         HandleZoomInput();
         UpdateCameraPosition();
+    }
+
+    /// <summary>
+    /// Gets the appropriate delta time based on useUnscaledTime setting.
+    /// </summary>
+    private float GetDeltaTime()
+    {
+        return useUnscaledTime ? Time.unscaledDeltaTime : Time.deltaTime;
     }
     
     private void HandleRotationInput()
@@ -139,11 +151,12 @@ namespace RPG.Core
                 lastMousePosition = currentMousePosition;
 
                 // Apply rotation
-                ApplyRotation(mouseDelta.x * rotationSpeed * Time.deltaTime,
-                             mouseDelta.y * rotationSpeed * Time.deltaTime);
+                float dt = GetDeltaTime();
+                ApplyRotation(mouseDelta.x * rotationSpeed * dt,
+                             mouseDelta.y * rotationSpeed * dt);
             }
         }
-        
+
         // Gamepad support - right stick for rotation while holding a button
         if (Gamepad.current != null)
         {
@@ -151,11 +164,12 @@ namespace RPG.Core
             if (Gamepad.current.rightShoulder.isPressed)
             {
                 Vector2 stickInput = Gamepad.current.rightStick.ReadValue();
-                
+
                 if (stickInput.magnitude > 0.1f) // Deadzone
                 {
-                    ApplyRotation(stickInput.x * rotationSpeed * Time.deltaTime,
-                                 stickInput.y * rotationSpeed * Time.deltaTime);
+                    float dt = GetDeltaTime();
+                    ApplyRotation(stickInput.x * rotationSpeed * dt,
+                                 stickInput.y * rotationSpeed * dt);
                 }
             }
         }
@@ -187,16 +201,18 @@ namespace RPG.Core
             
             if (Mathf.Abs(zoomInput) > 0.01f)
             {
-                targetDistance += zoomInput * zoomSpeed * Time.deltaTime;
+                float dt = GetDeltaTime();
+                targetDistance += zoomInput * zoomSpeed * dt;
                 targetDistance = Mathf.Clamp(targetDistance, minDistance, maxDistance);
             }
         }
-        
+
         // Apply zoom with or without smoothing
         if (smoothZoom)
         {
             // Invert smoothing value so higher = smoother (more intuitive)
-            float lerpSpeed = (16f - zoomSmoothing) * Time.deltaTime;
+            float dt = GetDeltaTime();
+            float lerpSpeed = (16f - zoomSmoothing) * dt;
             currentDistance = Mathf.Lerp(currentDistance, targetDistance, lerpSpeed);
         }
         else
@@ -212,7 +228,8 @@ namespace RPG.Core
         {
             // Invert smoothing value so higher = smoother (more intuitive)
             // Convert smoothing (1-20) to lerp speed where higher smoothing = slower movement
-            float lerpSpeed = (21f - rotationSmoothing) * Time.deltaTime;
+            float dt = GetDeltaTime();
+            float lerpSpeed = (21f - rotationSmoothing) * dt;
 
             // Use LerpAngle for horizontal to handle 360-0 degree wrapping properly
             currentHorizontalAngle = Mathf.LerpAngle(currentHorizontalAngle, targetHorizontalAngle, lerpSpeed);

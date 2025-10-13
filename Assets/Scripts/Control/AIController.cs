@@ -67,6 +67,7 @@ namespace RPG.Control
         private UnityEngine.AI.NavMeshAgent navMeshAgent;
         private PatrolController patrolController;
         private PostCombatHandler postCombatHandler;
+        private Combat.Feedback.Knockback knockback;
 
         // State
         private GameObject player;
@@ -91,6 +92,7 @@ namespace RPG.Control
             navMeshAgent = GetComponent<UnityEngine.AI.NavMeshAgent>();
             patrolController = GetComponent<PatrolController>();
             postCombatHandler = GetComponent<PostCombatHandler>();
+            knockback = GetComponent<Combat.Feedback.Knockback>();
             player = GameObject.FindGameObjectWithTag("Player");
             guardPosition = transform.position;
 
@@ -112,6 +114,12 @@ namespace RPG.Control
         {
             // Don't do anything if dead
             if (health.IsDead()) return;
+
+            // Don't take any actions while being knocked back
+            if (knockback != null && knockback.IsKnockedBack())
+            {
+                return;
+            }
 
             // Update post-combat handler (runs its state machine)
             postCombatHandler.UpdatePostCombat();

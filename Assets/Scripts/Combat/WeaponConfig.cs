@@ -85,13 +85,6 @@ namespace RPG.Combat
         [Min(0f)]
         public float knockbackForce = 5f;
 
-        [Header("Animation")]
-        [Tooltip("Enable hit reaction animation on target")]
-        public bool enableHitReact = true;
-
-        [Tooltip("Animator trigger name for hit reaction")]
-        public string hitReactTrigger = "hitReact";
-
         // ===== Helper Methods =====
 
         /// <summary>

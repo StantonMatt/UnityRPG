@@ -1,5 +1,7 @@
 using UnityEngine;
+using UnityEngine.AI;
 using System.Collections;
+using System.Collections.Generic;
 using RPG.Combat;
 
 namespace RPG.Core
@@ -17,12 +19,38 @@ namespace RPG.Core
         [Tooltip("Enable hitstop effect globally")]
         [SerializeField] private bool enableHitStop = true;
 
+        [Tooltip("Use slow motion instead of freeze")]
+        [SerializeField] private bool useSlowMotion = false;
+
+        [Tooltip("Slow motion speed (0.1 = 10% speed, 0.5 = 50% speed)")]
+        [Range(0.1f, 0.5f)]
+        [SerializeField] private float slowMotionSpeed = 0.3f;
+
+        [Space(10)]
+        [Header("Who Gets Affected")]
+        [Tooltip("Only freeze/slow the attacker and target characters (others keep moving normally)")]
+        [SerializeField] private bool affectOnlyInvolvedCharacters = false;
+
+        [Tooltip("Only freeze/slow the TARGET (not the attacker). Makes player attacks feel more responsive.")]
+        [SerializeField] private bool freezeTargetOnly = true;
+
+        [Space(10)]
+        [Header("Conditions")]
+        [Tooltip("When should hitstop trigger involving the player?")]
+        [SerializeField] private PlayerHitStopMode playerHitStopMode = PlayerHitStopMode.PlayerAttacksOnly;
+
+        public enum PlayerHitStopMode
+        {
+            Always,              // Hitstop for all hits (even enemy vs enemy)
+            PlayerAttacksOnly,   // Only when player attacks
+            PlayerHitOnly,       // Only when player gets hit
+            PlayerInvolved       // When player attacks OR gets hit
+        }
+
+        [Space(10)]
         [Tooltip("Multiplier for hitstop duration (1 = use weapon config value)")]
         [Range(0f, 3f)]
         [SerializeField] private float hitStopMultiplier = 1f;
-
-        [Tooltip("Only apply hitstop if player is involved (attacker or target)")]
-        [SerializeField] private bool playerOnlyHitStop = true;
 
         // Active hitstop coroutine
         private Coroutine hitStopCoroutine;
@@ -42,7 +70,7 @@ namespace RPG.Core
 
             originalTimeScale = Time.timeScale;
 
-            GameDebug.Log($"[TimeController] Initialized. HitStop enabled: {enableHitStop}",
+            GameDebug.Log($"[TimeController] Initialized. HitStop: {enableHitStop}, SlowMo: {useSlowMotion}, InvolvedOnly: {affectOnlyInvolvedCharacters}, TargetOnly: {freezeTargetOnly}, Mode: {playerHitStopMode}",
                 config => config.logTimeController);
         }
 
@@ -63,41 +91,70 @@ namespace RPG.Core
             WeaponConfig weapon = e.Weapon;
             if (weapon == null || !weapon.enableHitStop) return;
 
-            // Check if player is involved
-            if (playerOnlyHitStop)
+            // Check player involvement based on mode
+            bool playerIsAttacker = IsPlayer(e.Attacker);
+            bool playerIsTarget = IsPlayer(e.Target);
+
+            bool shouldTrigger = playerHitStopMode switch
             {
-                bool playerInvolved = IsPlayer(e.Attacker) || IsPlayer(e.Target);
-                if (!playerInvolved)
-                {
-                    GameDebug.Log($"[TimeController] Skipping hitstop - player not involved",
-                        config => config.logTimeController);
-                    return;
-                }
+                PlayerHitStopMode.Always => true,
+                PlayerHitStopMode.PlayerAttacksOnly => playerIsAttacker,
+                PlayerHitStopMode.PlayerHitOnly => playerIsTarget,
+                PlayerHitStopMode.PlayerInvolved => playerIsAttacker || playerIsTarget,
+                _ => false
+            };
+
+            if (!shouldTrigger)
+            {
+                GameDebug.Log($"[TimeController] Skipping hitstop - condition not met (Mode: {playerHitStopMode}, PlayerAttacker: {playerIsAttacker}, PlayerTarget: {playerIsTarget})",
+                    config => config.logTimeController);
+                return;
             }
 
-            // Apply hitstop
+            // Apply hitstop based on settings
             float duration = weapon.hitStopDuration * hitStopMultiplier;
-            ApplyHitStop(duration);
 
-            GameDebug.Log($"[TimeController] Applying hitstop: {duration}s (weapon: {weapon.name})",
+            if (affectOnlyInvolvedCharacters)
+            {
+                // Freeze/slow only attacker and target using Time.timeScale + selective animator disabling
+                if (useSlowMotion)
+                    ApplySelectiveSlowMotion(e.Attacker, e.Target, slowMotionSpeed, duration);
+                else
+                    ApplySelectiveFreeze(e.Attacker, e.Target, duration);
+            }
+            else
+            {
+                // Global hitstop affects everything (camera still works with unscaled time)
+                if (useSlowMotion)
+                    ApplySlowMotion(slowMotionSpeed, duration);
+                else
+                    ApplyGlobalFreeze(duration);
+            }
+
+            string mode = affectOnlyInvolvedCharacters ?
+                (freezeTargetOnly ? "Target Only" : "Attacker + Target") : "Global";
+            string effect = useSlowMotion ? $"SlowMo ({slowMotionSpeed}x)" : "Freeze";
+            GameDebug.Log($"[TimeController] Applying {effect} ({mode}): {duration}s",
                 config => config.logTimeController);
         }
 
         /// <summary>
-        /// Apply a brief time freeze (hitstop effect).
+        /// Apply global freeze (entire game pauses).
+        /// Camera can still move if using Time.unscaledDeltaTime (FollowCamera does by default).
         /// </summary>
-        public void ApplyHitStop(float duration)
+        public void ApplyGlobalFreeze(float duration)
         {
             if (hitStopCoroutine != null)
             {
                 StopCoroutine(hitStopCoroutine);
             }
 
-            hitStopCoroutine = StartCoroutine(HitStopRoutine(duration));
+            hitStopCoroutine = StartCoroutine(GlobalFreezeRoutine(duration));
         }
 
         /// <summary>
-        /// Apply slow motion effect.
+        /// Apply slow motion effect (global Time.timeScale).
+        /// Camera can still move if using Time.unscaledDeltaTime (FollowCamera does by default).
         /// </summary>
         public void ApplySlowMotion(float timeScale, float duration)
         {
@@ -107,6 +164,34 @@ namespace RPG.Core
             }
 
             hitStopCoroutine = StartCoroutine(SlowMotionRoutine(timeScale, duration));
+        }
+
+        /// <summary>
+        /// Freeze only attacker and target (others keep moving).
+        /// Uses Time.timeScale but disables other animators temporarily.
+        /// </summary>
+        public void ApplySelectiveFreeze(GameObject attacker, GameObject target, float duration)
+        {
+            if (hitStopCoroutine != null)
+            {
+                StopCoroutine(hitStopCoroutine);
+            }
+
+            hitStopCoroutine = StartCoroutine(SelectiveFreezeRoutine(attacker, target, duration));
+        }
+
+        /// <summary>
+        /// Slow motion only for attacker and target (others keep moving).
+        /// Uses Time.timeScale but disables other animators temporarily.
+        /// </summary>
+        public void ApplySelectiveSlowMotion(GameObject attacker, GameObject target, float speed, float duration)
+        {
+            if (hitStopCoroutine != null)
+            {
+                StopCoroutine(hitStopCoroutine);
+            }
+
+            hitStopCoroutine = StartCoroutine(SelectiveSlowMotionRoutine(attacker, target, speed, duration));
         }
 
         /// <summary>
@@ -123,9 +208,9 @@ namespace RPG.Core
             Time.timeScale = originalTimeScale;
         }
 
-        private IEnumerator HitStopRoutine(float duration)
+        private IEnumerator GlobalFreezeRoutine(float duration)
         {
-            // Freeze time
+            // Freeze entire game
             Time.timeScale = 0f;
 
             // Wait using real time (unaffected by timeScale)
@@ -134,7 +219,7 @@ namespace RPG.Core
             // Restore normal time
             Time.timeScale = originalTimeScale;
 
-            GameDebug.Log($"[TimeController] Hitstop complete, restored timeScale to {originalTimeScale}",
+            GameDebug.Log($"[TimeController] Global freeze complete",
                 config => config.logTimeController);
         }
 
@@ -152,7 +237,215 @@ namespace RPG.Core
             // Restore normal time
             Time.timeScale = originalTimeScale;
 
-            GameDebug.Log($"[TimeController] Slow motion complete, restored timeScale to {originalTimeScale}",
+            GameDebug.Log($"[TimeController] Slow motion complete",
+                config => config.logTimeController);
+        }
+
+        private IEnumerator SelectiveFreezeRoutine(GameObject attacker, GameObject target, float duration)
+        {
+            // Get all animators and agents in scene
+            Animator[] allAnimators = FindObjectsByType<Animator>(FindObjectsSortMode.None);
+            NavMeshAgent[] allAgents = FindObjectsByType<NavMeshAgent>(FindObjectsSortMode.None);
+
+            // Find attacker and target components
+            Animator attackerAnim = attacker?.GetComponent<Animator>();
+            Animator targetAnim = target?.GetComponent<Animator>();
+            NavMeshAgent attackerAgent = attacker?.GetComponent<NavMeshAgent>();
+            NavMeshAgent targetAgent = target?.GetComponent<NavMeshAgent>();
+
+            // Store uninvolved animators and set to unscaled time
+            List<Animator> unaffectedAnimators = new List<Animator>();
+            foreach (Animator anim in allAnimators)
+            {
+                // Skip target animator (will be frozen)
+                if (anim == targetAnim) continue;
+
+                // If freezeTargetOnly, also make attacker unaffected
+                bool shouldBeUnaffected = anim != targetAnim && anim.enabled;
+                if (freezeTargetOnly)
+                {
+                    shouldBeUnaffected = anim != targetAnim && anim.enabled;
+                }
+                else
+                {
+                    shouldBeUnaffected = anim != attackerAnim && anim != targetAnim && anim.enabled;
+                }
+
+                if (shouldBeUnaffected)
+                {
+                    anim.updateMode = AnimatorUpdateMode.UnscaledTime; // Ignore timeScale
+                    unaffectedAnimators.Add(anim);
+                }
+            }
+
+            // Store uninvolved agents and their speeds
+            List<NavMeshAgent> unaffectedAgents = new List<NavMeshAgent>();
+            List<float> savedSpeeds = new List<float>();
+            foreach (NavMeshAgent agent in allAgents)
+            {
+                // Skip target agent (will be frozen)
+                if (agent == targetAgent) continue;
+
+                // If freezeTargetOnly, also make attacker unaffected
+                bool shouldBeUnaffected;
+                if (freezeTargetOnly)
+                {
+                    shouldBeUnaffected = agent != targetAgent && agent.enabled;
+                }
+                else
+                {
+                    shouldBeUnaffected = agent != attackerAgent && agent != targetAgent && agent.enabled;
+                }
+
+                if (shouldBeUnaffected)
+                {
+                    unaffectedAgents.Add(agent);
+                    savedSpeeds.Add(agent.speed);
+                }
+            }
+
+            // Freeze time
+            Time.timeScale = 0f;
+
+            // Manually update unaffected agents using unscaled time
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                float unscaledDelta = Time.unscaledDeltaTime;
+
+                // Manually move unaffected agents
+                for (int i = 0; i < unaffectedAgents.Count; i++)
+                {
+                    NavMeshAgent agent = unaffectedAgents[i];
+                    if (agent != null && agent.enabled && agent.hasPath)
+                    {
+                        // Calculate movement manually
+                        Vector3 direction = (agent.steeringTarget - agent.transform.position).normalized;
+                        agent.transform.position += direction * savedSpeeds[i] * unscaledDelta;
+                    }
+                }
+
+                elapsed += unscaledDelta;
+                yield return null;
+            }
+
+            // Restore time
+            Time.timeScale = originalTimeScale;
+
+            // Restore animators
+            foreach (Animator anim in unaffectedAnimators)
+            {
+                if (anim != null)
+                {
+                    anim.updateMode = AnimatorUpdateMode.Normal;
+                }
+            }
+
+            GameDebug.Log($"[TimeController] Selective freeze complete: {unaffectedAnimators.Count} animators, {unaffectedAgents.Count} agents unaffected",
+                config => config.logTimeController);
+        }
+
+        private IEnumerator SelectiveSlowMotionRoutine(GameObject attacker, GameObject target, float speed, float duration)
+        {
+            // Get all animators and agents in scene
+            Animator[] allAnimators = FindObjectsByType<Animator>(FindObjectsSortMode.None);
+            NavMeshAgent[] allAgents = FindObjectsByType<NavMeshAgent>(FindObjectsSortMode.None);
+
+            // Find attacker and target components
+            Animator attackerAnim = attacker?.GetComponent<Animator>();
+            Animator targetAnim = target?.GetComponent<Animator>();
+            NavMeshAgent attackerAgent = attacker?.GetComponent<NavMeshAgent>();
+            NavMeshAgent targetAgent = target?.GetComponent<NavMeshAgent>();
+
+            // Store uninvolved animators and set to unscaled time
+            List<Animator> unaffectedAnimators = new List<Animator>();
+            foreach (Animator anim in allAnimators)
+            {
+                // Skip target animator (will be slowed)
+                if (anim == targetAnim) continue;
+
+                // If freezeTargetOnly, also make attacker unaffected
+                bool shouldBeUnaffected;
+                if (freezeTargetOnly)
+                {
+                    shouldBeUnaffected = anim != targetAnim && anim.enabled;
+                }
+                else
+                {
+                    shouldBeUnaffected = anim != attackerAnim && anim != targetAnim && anim.enabled;
+                }
+
+                if (shouldBeUnaffected)
+                {
+                    anim.updateMode = AnimatorUpdateMode.UnscaledTime; // Ignore timeScale
+                    unaffectedAnimators.Add(anim);
+                }
+            }
+
+            // Store uninvolved agents and their speeds
+            List<NavMeshAgent> unaffectedAgents = new List<NavMeshAgent>();
+            List<float> savedSpeeds = new List<float>();
+            foreach (NavMeshAgent agent in allAgents)
+            {
+                // Skip target agent (will be slowed)
+                if (agent == targetAgent) continue;
+
+                // If freezeTargetOnly, also make attacker unaffected
+                bool shouldBeUnaffected;
+                if (freezeTargetOnly)
+                {
+                    shouldBeUnaffected = agent != targetAgent && agent.enabled;
+                }
+                else
+                {
+                    shouldBeUnaffected = agent != attackerAgent && agent != targetAgent && agent.enabled;
+                }
+
+                if (shouldBeUnaffected)
+                {
+                    unaffectedAgents.Add(agent);
+                    savedSpeeds.Add(agent.speed);
+                }
+            }
+
+            // Set slow motion
+            Time.timeScale = speed;
+
+            // Manually update unaffected agents at normal speed using unscaled time
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                float unscaledDelta = Time.unscaledDeltaTime;
+
+                // Manually move unaffected agents at normal speed
+                for (int i = 0; i < unaffectedAgents.Count; i++)
+                {
+                    NavMeshAgent agent = unaffectedAgents[i];
+                    if (agent != null && agent.enabled && agent.hasPath)
+                    {
+                        // Calculate movement manually at normal speed
+                        Vector3 direction = (agent.steeringTarget - agent.transform.position).normalized;
+                        agent.transform.position += direction * savedSpeeds[i] * unscaledDelta;
+                    }
+                }
+
+                elapsed += unscaledDelta;
+                yield return null;
+            }
+
+            // Restore time
+            Time.timeScale = originalTimeScale;
+
+            // Restore animators
+            foreach (Animator anim in unaffectedAnimators)
+            {
+                if (anim != null)
+                {
+                    anim.updateMode = AnimatorUpdateMode.Normal;
+                }
+            }
+
+            GameDebug.Log($"[TimeController] Selective slow motion complete: {unaffectedAnimators.Count} animators, {unaffectedAgents.Count} agents unaffected",
                 config => config.logTimeController);
         }
 
