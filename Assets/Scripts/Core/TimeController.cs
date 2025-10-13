@@ -116,11 +116,22 @@ namespace RPG.Core
 
             if (affectOnlyInvolvedCharacters)
             {
-                // Freeze/slow only attacker and target using Time.timeScale + selective animator disabling
-                if (useSlowMotion)
-                    ApplySelectiveSlowMotion(e.Attacker, e.Target, slowMotionSpeed, duration);
+                if (freezeTargetOnly)
+                {
+                    // Only affect target - no Time.timeScale manipulation needed
+                    if (useSlowMotion)
+                        ApplyTargetOnlySlowMotion(e.Target, slowMotionSpeed, duration);
+                    else
+                        ApplyTargetOnlyFreeze(e.Target, duration);
+                }
                 else
-                    ApplySelectiveFreeze(e.Attacker, e.Target, duration);
+                {
+                    // Freeze/slow both attacker and target using Time.timeScale + selective animator disabling
+                    if (useSlowMotion)
+                        ApplySelectiveSlowMotion(e.Attacker, e.Target, slowMotionSpeed, duration);
+                    else
+                        ApplySelectiveFreeze(e.Attacker, e.Target, duration);
+                }
             }
             else
             {
@@ -164,6 +175,32 @@ namespace RPG.Core
             }
 
             hitStopCoroutine = StartCoroutine(SlowMotionRoutine(timeScale, duration));
+        }
+
+        /// <summary>
+        /// Freeze only the target character (doesn't use Time.timeScale - no side effects).
+        /// </summary>
+        public void ApplyTargetOnlyFreeze(GameObject target, float duration)
+        {
+            if (hitStopCoroutine != null)
+            {
+                StopCoroutine(hitStopCoroutine);
+            }
+
+            hitStopCoroutine = StartCoroutine(TargetOnlyFreezeRoutine(target, duration));
+        }
+
+        /// <summary>
+        /// Slow motion only the target character (doesn't use Time.timeScale - no side effects).
+        /// </summary>
+        public void ApplyTargetOnlySlowMotion(GameObject target, float speed, float duration)
+        {
+            if (hitStopCoroutine != null)
+            {
+                StopCoroutine(hitStopCoroutine);
+            }
+
+            hitStopCoroutine = StartCoroutine(TargetOnlySlowMotionRoutine(target, speed, duration));
         }
 
         /// <summary>
@@ -446,6 +483,110 @@ namespace RPG.Core
             }
 
             GameDebug.Log($"[TimeController] Selective slow motion complete: {unaffectedAnimators.Count} animators, {unaffectedAgents.Count} agents unaffected",
+                config => config.logTimeController);
+        }
+
+        private IEnumerator TargetOnlyFreezeRoutine(GameObject target, float duration)
+        {
+            if (target == null) yield break;
+
+            // Get target components
+            Animator targetAnim = target.GetComponent<Animator>();
+            NavMeshAgent targetAgent = target.GetComponent<NavMeshAgent>();
+
+            // DEBUG: Check if components exist
+            GameDebug.Log($"[TimeController] Target components - Animator: {targetAnim != null}, NavMeshAgent: {targetAgent != null}",
+                config => config.logTimeController);
+
+            if (targetAnim != null)
+            {
+                GameDebug.Log($"[TimeController] BEFORE - Animator.speed: {targetAnim.speed}, updateMode: {targetAnim.updateMode}",
+                    config => config.logTimeController);
+            }
+            if (targetAgent != null)
+            {
+                GameDebug.Log($"[TimeController] BEFORE - Agent.speed: {targetAgent.speed}, isStopped: {targetAgent.isStopped}, enabled: {targetAgent.enabled}",
+                    config => config.logTimeController);
+            }
+
+            // Store original values
+            float originalAnimSpeed = targetAnim != null ? targetAnim.speed : 1f;
+            float originalAgentSpeed = targetAgent != null ? targetAgent.speed : 0f;
+            bool wasAgentStopped = targetAgent != null && targetAgent.isStopped;
+
+            // Freeze target only (no Time.timeScale manipulation!)
+            if (targetAnim != null)
+            {
+                targetAnim.speed = 0f;
+                GameDebug.Log($"[TimeController] Set Animator.speed to 0, now: {targetAnim.speed}",
+                    config => config.logTimeController);
+            }
+            if (targetAgent != null && targetAgent.enabled)
+            {
+                targetAgent.isStopped = true;
+                targetAgent.velocity = Vector3.zero;
+                GameDebug.Log($"[TimeController] Set agent.isStopped to true, agent.velocity to zero",
+                    config => config.logTimeController);
+            }
+
+            GameDebug.Log($"[TimeController] Target-only freeze: {target.name} for {duration}s (no Time.timeScale used)",
+                config => config.logTimeController);
+
+            // Wait in real time
+            yield return new WaitForSeconds(duration);
+
+            // Restore target
+            if (targetAnim != null)
+            {
+                targetAnim.speed = originalAnimSpeed;
+                GameDebug.Log($"[TimeController] RESTORED - Animator.speed to: {targetAnim.speed}",
+                    config => config.logTimeController);
+            }
+            if (targetAgent != null && targetAgent.enabled)
+            {
+                targetAgent.isStopped = wasAgentStopped;
+                targetAgent.speed = originalAgentSpeed;
+                GameDebug.Log($"[TimeController] RESTORED - Agent.speed to: {targetAgent.speed}, isStopped: {targetAgent.isStopped}",
+                    config => config.logTimeController);
+            }
+
+            GameDebug.Log($"[TimeController] Target-only freeze complete",
+                config => config.logTimeController);
+        }
+
+        private IEnumerator TargetOnlySlowMotionRoutine(GameObject target, float speed, float duration)
+        {
+            if (target == null) yield break;
+
+            // Get target components
+            Animator targetAnim = target.GetComponent<Animator>();
+            NavMeshAgent targetAgent = target.GetComponent<NavMeshAgent>();
+
+            // Store original values
+            float originalAnimSpeed = targetAnim != null ? targetAnim.speed : 1f;
+            float originalAgentSpeed = targetAgent != null ? targetAgent.speed : 0f;
+
+            // Slow down target only (no Time.timeScale manipulation!)
+            if (targetAnim != null) targetAnim.speed = speed;
+            if (targetAgent != null && targetAgent.enabled)
+            {
+                targetAgent.speed = originalAgentSpeed * speed;
+            }
+
+            GameDebug.Log($"[TimeController] Target-only slow motion: {target.name} to {speed}x for {duration}s (no Time.timeScale used)",
+                config => config.logTimeController);
+
+            // Wait in real time
+            yield return new WaitForSeconds(duration);
+
+            // Restore target
+            if (targetAnim != null) targetAnim.speed = originalAnimSpeed;
+            if (targetAgent != null && targetAgent.enabled)
+            {
+                targetAgent.speed = originalAgentSpeed;
+            }
+
+            GameDebug.Log($"[TimeController] Target-only slow motion complete",
                 config => config.logTimeController);
         }
 
