@@ -13,12 +13,11 @@ MonoBehaviour:
   m_Name: DebugConfig
   m_EditorClassIdentifier: Assembly-CSharp::RPG.Core.DebugConfig
   logCombatEvents: 0
-  logAttackEvents: 0
+  logAttackEvents: 1
   logFighterState: 0
   logHitSounds: 0
   logWeaponSounds: 0
   logHitFlash: 0
-  logHitReact: 0
   logKnockback: 0
   logMoverActions: 0
   logPathfinding: 0
@@ -30,5 +29,5 @@ MonoBehaviour:
   logVFXSpawner: 0
   logObjectPool: 0
   logCameraShake: 0
-  logTimeController: 0
+  logTimeController: 1
   enableDebugLogs: 1
